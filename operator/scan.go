@@ -2,34 +2,40 @@ package operator
 
 import (
 	"bufio"
+	"errors"
 	"os"
+	rl "sgbd/relation"
 	"strings"
 )
 
 type Scan struct {
 	path, sep string
-	data      [][]string
+	columns   []string
+	relation  *rl.Relation
 	position  int
+	opened    bool
 }
 
-func NewScan(path, sep string) *Scan {
-	return &Scan{path: path, sep: sep}
+// NewScan returns a new Scan operator
+func NewScan(path, sep string, columns []string) *Scan {
+	return &Scan{path: path, sep: sep, columns: columns, opened: false}
 }
 
-func (scan *Scan) Open() error {
-	file, err := os.Open(scan.path)
+// Open starts the Scan operator
+func (s *Scan) Open() error {
+	file, err := os.Open(s.path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	scan.position = 0
-	scan.data = make([][]string, 0)
+	s.position = 0
+	s.relation = rl.NewRelation(s.columns)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		scan.data = append(scan.data, strings.Split(line, scan.sep))
+		s.relation.AddRow(strings.Split(line, s.sep))
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -39,17 +45,28 @@ func (scan *Scan) Open() error {
 	return nil
 }
 
-func (scan *Scan) Next() (*[]string, error) {
-	if scan.position >= len(scan.data) {
+// Next return the next tuple being pointed by the Scan operator
+func (s *Scan) Next() (*rl.Tuple, error) {
+	if !s.opened {
+		return nil, errors.New("Scan operator is closed")
+	}
+
+	if s.position >= len(s.relation.Rows()) {
 		return nil, nil
 	}
 
-	tuple := scan.data[scan.position]
-	scan.position++
-	return &tuple, nil
+	tuple := s.relation.GetRow(s.position)
+	s.position++
+
+	return tuple, nil
 }
 
-func (scan *Scan) Close() error {
-	scan = nil
+// Close ends the Scan operator
+func (s *Scan) Close() error {
+	s = nil
 	return nil
+}
+
+func (s *Scan) columnGet() []string {
+	return s.columns
 }
