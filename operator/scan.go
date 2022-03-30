@@ -55,10 +55,10 @@ func (s *Scan) Next() (*rl.Tuple, error) {
 		return nil, nil
 	}
 
-	tuple := s.relation.GetRow(s.position)
+	tuple, err := s.relation.GetRow(s.position)
 	s.position++
 
-	return tuple, nil
+	return tuple, err
 }
 
 // Close ends the Scan operator

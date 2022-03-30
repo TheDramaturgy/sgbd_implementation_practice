@@ -29,10 +29,13 @@ func (s *Sort) Open() error {
 
 	var t *rl.Tuple
 	for t, err = s.child.Next(); t != nil; t, err = s.child.Next() {
+		if err != nil {
+			return err
+		}
 		s.relation.AddTuple(t)
 	}
 
-	s.relation.Sort(s.target)
+	err = s.relation.Sort(s.target)
 	return err
 }
 
@@ -42,14 +45,13 @@ func (s *Sort) Next() (*rl.Tuple, error) {
 	}
 
 	if s.position >= len(s.relation.Rows()) {
-		s.Close()
 		return nil, nil
 	}
 
-	tuple := s.relation.GetRow(s.position)
+	tuple, err := s.relation.GetRow(s.position)
 	s.position++
 
-	return tuple, nil
+	return tuple, err
 }
 
 func (s *Sort) Close() error {
@@ -60,4 +62,8 @@ func (s *Sort) Close() error {
 
 	s = nil
 	return err
+}
+
+func (s *Sort) columnGet() []string {
+	return s.columns
 }

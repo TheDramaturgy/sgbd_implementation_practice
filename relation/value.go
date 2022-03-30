@@ -36,15 +36,27 @@ func (v Value) String() string {
 	return v.value_
 }
 
-func (v Value) Get() (any, string) {
+func (v Value) Get() (any, reflect.Type) {
 	switch v.type_ {
 	case reflect.TypeOf(FLOAT):
 		cValue, _ := strconv.ParseFloat(v.value_, 64)
-		return cValue, reflect.TypeOf(FLOAT).String()
+		return cValue, TypeOfFloat()
 	case reflect.TypeOf(INT):
 		cValue, _ := strconv.ParseInt(v.value_, 10, 64)
-		return cValue, reflect.TypeOf(INT).String()
+		return cValue, TypeOfInt()
 	default:
-		return v.value_, reflect.TypeOf(STRING).String()
+		return v.value_, TypeOfString()
 	}
+}
+
+func TypeOfInt() reflect.Type {
+	return reflect.TypeOf(INT)
+}
+
+func TypeOfFloat() reflect.Type {
+	return reflect.TypeOf(FLOAT)
+}
+
+func TypeOfString() reflect.Type {
+	return reflect.TypeOf(STRING)
 }

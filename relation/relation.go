@@ -1,6 +1,7 @@
 package relation
 
 import (
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -40,6 +41,15 @@ func (r *Relation) findColumnTypes(row []string) {
 	}
 }
 
+func (r *Relation) findIndexOf(column string) (int, error) {
+	for i, v := range r.columns {
+		if v == column {
+			return i, nil
+		}
+	}
+	return -1, errors.New("Column not found")
+}
+
 // AddRow adds a row to the relation
 func (r *Relation) AddRow(row []string) {
 	// if it is the first row added to the relation,
@@ -72,10 +82,78 @@ func (r *Relation) AddTuple(t *Tuple) {
 }
 
 // GetColumns returns the columns of the relation with the informed index
-func (r *Relation) GetRow(idx int) *Tuple {
-	return r.rows[idx]
+func (r *Relation) GetRow(idx int) (*Tuple, error) {
+	if idx < 0 || idx >= len(r.rows) {
+		return nil, errors.New("Index out of range")
+	}
+	return r.rows[idx], nil
 }
 
 func (r *Relation) Rows() []*Tuple {
 	return r.rows
+}
+
+func (r *Relation) Sort(target string) error {
+	col, err := r.findIndexOf(target)
+	if err != nil {
+		return err
+	}
+
+	quickSort(r.rows, col, 0, len(r.rows)-1)
+	return nil
+}
+
+func quickSort(rows []*Tuple, target, start, end int) {
+	if start < end {
+		p := partition(rows, target, start, end)
+		quickSort(rows, target, start, p-1)
+		quickSort(rows, target, p+1, end)
+	}
+}
+
+func partition(rows []*Tuple, target, start, end int) int {
+	rows[end], rows[(start+end)/2] = rows[(start+end)/2], rows[end]
+	pivot := rows[end]
+	pValue, vType := pivot.GetValue(target).Get()
+
+	pointer := start - 1
+	for i := start; i < end; i++ {
+		cValue, _ := rows[i].GetValue(target).Get()
+
+		switch vType {
+		case TypeOfInt():
+			if cValue.(int64) > pValue.(int64) {
+				continue
+			}
+		case TypeOfFloat():
+			if cValue.(float64) > pValue.(float64) {
+				continue
+			}
+		case TypeOfString():
+			if cValue.(string) > pValue.(string) {
+				continue
+			}
+		}
+
+		pointer++
+		rows[pointer], rows[i] = rows[i], rows[pointer]
+	}
+
+	cValue, _ := rows[pointer+1].GetValue(target).Get()
+	switch vType {
+	case TypeOfInt():
+		if cValue.(int64) > pValue.(int64) {
+			rows[pointer+1], rows[end] = rows[end], rows[pointer+1]
+		}
+	case TypeOfFloat():
+		if cValue.(float64) > pValue.(float64) {
+			rows[pointer+1], rows[end] = rows[end], rows[pointer+1]
+		}
+	case TypeOfString():
+		if cValue.(string) > pValue.(string) {
+			rows[pointer+1], rows[end] = rows[end], rows[pointer+1]
+		}
+	}
+
+	return pointer + 1
 }
