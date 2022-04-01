@@ -20,9 +20,11 @@ func NewPrint(child Operator) *Print {
 func (print *Print) Open() error {
 	err := print.child.Open()
 	if err != nil {
-		print.columns = print.child.(columnGetter).columnGet()
+		return err
 	}
-	return err
+
+	print.columns = print.child.(columnGetter).columnGet()
+	return nil
 }
 
 // Next returns the next tuple from the Print operator

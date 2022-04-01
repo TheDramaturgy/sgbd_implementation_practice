@@ -34,9 +34,15 @@ func (s *Sort) Open() error {
 		}
 		s.relation.AddTuple(t)
 	}
+	s.child.Close()
 
 	err = s.relation.Sort(s.target)
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.opened = true
+	return nil
 }
 
 func (s *Sort) Next() (*rl.Tuple, error) {

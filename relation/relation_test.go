@@ -9,8 +9,9 @@ func TestTupleString(t *testing.T) {
 	r := NewRelation([]string{"id", "name", "age"})
 	r.AddRow([]string{"1", "John", "20.0"})
 
-	if r.GetRow(0).String() != "1, John, 20.0" {
-		t.Error("Expected 1, John, 20.0, got", r.GetRow(0).String())
+	tuple, _ := r.GetRow(0)
+	if tuple.String() != "1, John, 20.0" {
+		t.Error("Expected 1, John, 20.0, got", tuple.String())
 	}
 }
 
@@ -18,10 +19,11 @@ func TestTupleEdit(t *testing.T) {
 	r := NewRelation([]string{"id", "name", "age"})
 	r.AddRow([]string{"1", "John", "20"})
 
-	row := r.GetRow(0)
+	row, _ := r.GetRow(0)
 	*row = *NewTuple([]string{"2", "Jane", "21"})
-	if r.GetRow(0).String() != "2, Jane, 21" {
-		t.Error("Expected 2, Jane, 21, got", r.GetRow(0).String())
+	newRow, _ := r.GetRow(0)
+	if newRow.String() != "2, Jane, 21" {
+		t.Error("Expected 2, Jane, 21, got", newRow.String())
 	}
 }
 
@@ -40,20 +42,20 @@ func TestValueGet(t *testing.T) {
 	r := NewRelation([]string{"id", "name", "age"})
 	r.AddRow([]string{"1", "John", "20.0"})
 
-	tuple := *r.GetRow(0)
-	variable, _ := tuple[0].Get()
+	tuple, _ := r.GetRow(0)
+	variable, _ := (*tuple)[0].Get()
 	_, ok := variable.(int64)
 	if !ok {
 		t.Error("Expected int64, got", reflect.TypeOf(variable))
 	}
 
-	variable, _ = tuple[1].Get()
+	variable, _ = (*tuple)[1].Get()
 	_, ok = variable.(string)
 	if !ok {
 		t.Error("Expected string, got", reflect.TypeOf(variable))
 	}
 
-	variable, _ = tuple[2].Get()
+	variable, _ = (*tuple)[2].Get()
 	_, ok = variable.(float64)
 	if !ok {
 		t.Error("Expected float64, got", reflect.TypeOf(variable))
