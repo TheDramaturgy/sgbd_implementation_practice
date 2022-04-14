@@ -52,6 +52,6 @@ func (print *Print) Close() error {
 		err = print.child.Close()
 	}
 
-	print = nil
+	print.opened = false
 	return err
 }

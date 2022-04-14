@@ -21,11 +21,11 @@ func NewSort(child Operator, target string) *Sort {
 func (s *Sort) Open() error {
 	err := s.child.Open()
 	if err != nil {
-		s.columns = s.child.(columnGetter).columnGet()
-		s.relation = rl.NewRelation(s.columns)
-	} else {
 		return err
 	}
+
+	s.columns = s.child.(columnGetter).columnGet()
+	s.relation = rl.NewRelation(s.columns)
 
 	var t *rl.Tuple
 	for t, err = s.child.Next(); t != nil; t, err = s.child.Next() {
@@ -41,6 +41,7 @@ func (s *Sort) Open() error {
 		return err
 	}
 
+	s.position = 0
 	s.opened = true
 	return nil
 }
@@ -66,7 +67,9 @@ func (s *Sort) Close() error {
 		err = s.child.Close()
 	}
 
-	s = nil
+	s.relation = nil
+	s.opened = false
+	s.position = 0
 	return err
 }
 

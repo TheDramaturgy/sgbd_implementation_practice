@@ -29,7 +29,6 @@ func (s *Scan) Open() error {
 	}
 	defer file.Close()
 
-	s.position = 0
 	s.relation = rl.NewRelation(s.columns)
 
 	scanner := bufio.NewScanner(file)
@@ -42,6 +41,8 @@ func (s *Scan) Open() error {
 		return err
 	}
 
+	s.position = 0
+	s.opened = true
 	return nil
 }
 
@@ -51,7 +52,7 @@ func (s *Scan) Next() (*rl.Tuple, error) {
 		return nil, errors.New("Scan operator is closed")
 	}
 
-	if s.position >= len(s.relation.Rows()) {
+	if s.position >= s.relation.Size() {
 		return nil, nil
 	}
 
@@ -63,7 +64,9 @@ func (s *Scan) Next() (*rl.Tuple, error) {
 
 // Close ends the Scan operator
 func (s *Scan) Close() error {
-	s = nil
+	s.relation = nil
+	s.opened = false
+	s.position = 0
 	return nil
 }
 

@@ -178,7 +178,7 @@ func (f *Filter) Close() error {
 		err = f.child.Close()
 	}
 
-	f = nil
+	f.opened = false
 	return err
 }
 

@@ -49,6 +49,44 @@ func (v Value) Get() (any, reflect.Type) {
 	}
 }
 
+func (v Value) LesserThan(value Value) bool {
+	if v.type_ != value.type_ {
+		return false
+	}
+
+	switch v.type_ {
+	case reflect.TypeOf(FLOAT):
+		cValue, _ := strconv.ParseFloat(v.value_, 64)
+		cValue2, _ := strconv.ParseFloat(value.value_, 64)
+		return cValue < cValue2
+	case reflect.TypeOf(INT):
+		cValue, _ := strconv.ParseInt(v.value_, 10, 64)
+		cValue2, _ := strconv.ParseInt(value.value_, 10, 64)
+		return cValue < cValue2
+	default:
+		return v.value_ < value.value_
+	}
+}
+
+func (v Value) GreaterThan(value Value) bool {
+	if v.type_ != value.type_ {
+		return false
+	}
+
+	switch v.type_ {
+	case reflect.TypeOf(FLOAT):
+		cValue, _ := strconv.ParseFloat(v.value_, 64)
+		cValue2, _ := strconv.ParseFloat(value.value_, 64)
+		return cValue > cValue2
+	case reflect.TypeOf(INT):
+		cValue, _ := strconv.ParseInt(v.value_, 10, 64)
+		cValue2, _ := strconv.ParseInt(value.value_, 10, 64)
+		return cValue > cValue2
+	default:
+		return v.value_ > value.value_
+	}
+}
+
 func TypeOfInt() reflect.Type {
 	return reflect.TypeOf(INT)
 }

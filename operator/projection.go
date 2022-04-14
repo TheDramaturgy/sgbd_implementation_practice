@@ -79,7 +79,8 @@ func (p *Projection) Close() error {
 		err = p.child.Close()
 	}
 
-	p = nil
+	p.idxTarget = nil
+	p.opened = false
 	return err
 }
 

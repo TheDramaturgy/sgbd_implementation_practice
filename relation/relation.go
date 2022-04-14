@@ -18,6 +18,10 @@ func NewRelation(columns []string) *Relation {
 	return &Relation{columns: columns}
 }
 
+func (r *Relation) Size() int {
+	return len(r.rows)
+}
+
 // findColumnTypes finds the type of each column in the relation
 // usually called by AddRow when the first row is added to the relation
 func (r *Relation) findColumnTypes(row []string) {
