@@ -22,6 +22,10 @@ func (r *Relation) Size() int {
 	return len(r.rows)
 }
 
+func (r *Relation) Clear() {
+	r.rows = make([]*Tuple, 0)
+}
+
 // findColumnTypes finds the type of each column in the relation
 // usually called by AddRow when the first row is added to the relation
 func (r *Relation) findColumnTypes(row []string) {

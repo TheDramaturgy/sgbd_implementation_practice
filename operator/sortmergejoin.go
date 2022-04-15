@@ -18,7 +18,6 @@ type SortMergeJoin struct {
 	columns          []string
 	opened           bool
 	shouldReadBuffer bool
-	hasBufferEnded   bool
 }
 
 func NewSortMergeJoin(child1, child2 Operator, target1, target2 string) *SortMergeJoin {
@@ -65,7 +64,7 @@ func (j *SortMergeJoin) Open() error {
 	j.buffer = rl.NewRelation(j.child2.columnGet())
 	j.actualB = 0
 	j.shouldReadBuffer = false
-	j.hasBufferEnded = false
+	j.opened = true
 
 	return nil
 }
@@ -81,16 +80,48 @@ func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
 
 		// ------- Verify if should read buffer or child2 --------
 		a1 := j.actual1.GetValue(j.targetID1)
-		a2 := j.actual2.GetValue(j.targetID2)
-		tupleB, err := j.buffer.GetRow(j.actualB)
-		if err != nil {
-			return nil, err
+		var a2 rl.Value
+		if j.actual2 != nil {
+			a2 = j.actual2.GetValue(j.targetID2)
+		}
+		var tupleB *rl.Tuple = nil
+		if j.buffer.Size() > 0 {
+			tupleB, err = j.buffer.GetRow(j.actualB)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if j.shouldReadBuffer {
+			if tupleB == nil {
+				j.actual1, err = j.child1.Next()
+				if err != nil {
+					return nil, err
+				}
+				if j.actual1 == nil {
+					return nil, nil
+				}
+
+				t, _ := j.buffer.GetRow(0)
+				ab := t.GetValue(j.targetID2)
+				if a1 == ab {
+					j.actualB = 0
+				} else {
+					j.shouldReadBuffer = false
+					j.buffer.Clear()
+				}
+				continue
+			}
+
+			ab := tupleB.GetValue(j.targetID2)
+			if a1 != ab {
+				j.shouldReadBuffer = false
+				j.buffer.Clear()
+				continue
+			}
 
 		} else {
-			if a1 != a2 {
+			if j.actual2 == nil {
 				if tupleB != nil {
 					ab := tupleB.GetValue(j.targetID2)
 					if a1 == ab {
@@ -99,13 +130,27 @@ func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
 					}
 				}
 
+				j.actual1 = nil
+				return nil, nil
+			}
+
+			if a1 != a2 {
 				if a1.LesserThan(a2) {
 					j.actual1, err = j.child1.Next()
 					if err != nil {
 						return nil, err
 					}
+
 					if j.actual1 == nil {
 						return nil, nil
+					}
+
+					a1 = j.actual1.GetValue(j.targetID1)
+					if tupleB != nil {
+						ab := tupleB.GetValue(j.targetID2)
+						if a1 == ab {
+							j.shouldReadBuffer = true
+						}
 					}
 					continue
 				} else if j.actual2 != nil {
@@ -113,10 +158,14 @@ func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
 					if err != nil {
 						return nil, err
 					}
+					if j.actual2 == nil {
+						j.actual1 = nil
+						return nil, nil
+					}
+					continue
 				}
 			}
 		}
-
 		// ------- Read Next tuple --------
 
 		if j.shouldReadBuffer {
@@ -126,9 +175,6 @@ func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
 			}
 
 			j.actualB++
-			if j.actualB >= len(j.buffer.Rows()) {
-				j.hasBufferEnded = true
-			}
 		} else {
 			actual = j.actual2
 

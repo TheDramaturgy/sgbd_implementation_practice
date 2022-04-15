@@ -24,6 +24,7 @@ func (print *Print) Open() error {
 	}
 
 	print.columns = print.child.(columnGetter).columnGet()
+	print.opened = true
 	return nil
 }
 
