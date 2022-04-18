@@ -1,76 +1,88 @@
 package operator
 
 import (
+	"fmt"
 	rl "sgbd/relation"
 )
 
 type SortMergeJoin struct {
-	child1           *Sort
-	child2           *Sort
-	target1          string
-	target2          string
-	targetID1        int
-	targetID2        int
-	actual1          *rl.Tuple
-	actual2          *rl.Tuple
-	actualB          int
+	childLeft        *Sort
+	childRight       *Sort
+	targetLeft       string
+	targetRight      string
+	targetIDLeft     int
+	targetIDRight    int
+	currentLeft      *rl.Tuple
+	currentRight     *rl.Tuple
+	currentBufferIdx int
 	buffer           *rl.Relation
 	columns          []string
 	opened           bool
+	debug            bool
 	shouldReadBuffer bool
+	readFromBuffer   bool
 }
 
-func NewSortMergeJoin(child1, child2 Operator, target1, target2 string) *SortMergeJoin {
-	return &SortMergeJoin{child1: NewSort(child1, target1), child2: NewSort(child2, target2),
-		target1: target1, target2: target2, opened: false}
+// Constructor of SortMergeJoin Operator, it takes two children and the target columns to join.
+// The left child must be the minor one, once it will be iterated just once.
+func NewSortMergeJoin(childL, childR Operator, targetL, targetR string, debug bool) *SortMergeJoin {
+	return &SortMergeJoin{childLeft: NewSort(childL, targetL), childRight: NewSort(childR, targetR),
+		targetLeft: targetL, targetRight: targetR, opened: false, debug: debug}
 }
 
 func (j *SortMergeJoin) Open() error {
-	err := j.child1.Open()
+	// Open the children.
+	err := j.childLeft.Open()
 	if err != nil {
 		return err
 	}
 
-	err = j.child2.Open()
+	err = j.childRight.Open()
 	if err != nil {
 		return err
 	}
 
-	id1, err := findIndexOfTarget(j.target1, j.child1.columnGet())
+	// Find the index for the target columns.
+	id1, err := findIndexOfTarget(j.targetLeft, j.childLeft.columnGet())
 	if err != nil {
 		return err
 	}
 
-	id2, err := findIndexOfTarget(j.target2, j.child2.columnGet())
+	id2, err := findIndexOfTarget(j.targetRight, j.childRight.columnGet())
 	if err != nil {
 		return err
 	}
 
-	j.actual1, err = j.child1.Next()
+	// get current tuple of each child.
+	j.currentLeft, err = j.childLeft.Next()
 	if err != nil {
 		return err
 	}
 
-	j.actual2, err = j.child2.Next()
+	j.currentRight, err = j.childRight.Next()
 	if err != nil {
 		return err
 	}
 
-	j.targetID1 = id1
-	j.targetID2 = id2
-	j.columns = remove(j.child1.columnGet(), id1)
-	j.columns = append(j.columns, j.target1)
-	j.columns = append(j.columns, remove(j.child2.columnGet(), id2)...)
-	j.buffer = rl.NewRelation(j.child2.columnGet())
-	j.actualB = 0
+	// initialize the variables needed to the perform the join.
+	j.targetIDLeft = id1
+	j.targetIDRight = id2
+	j.columns = remove(j.childLeft.columnGet(), id1)
+	j.columns = append(j.columns, j.targetLeft)
+	j.columns = append(j.columns, remove(j.childRight.columnGet(), id2)...)
+	j.buffer = rl.NewRelation(j.childRight.columnGet())
+	j.currentBufferIdx = 0
 	j.shouldReadBuffer = false
+	j.readFromBuffer = false
 	j.opened = true
 
+	fmt.Println("SortMergeJoin operator is opened")
 	return nil
 }
 
 func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
-	if j.actual1 == nil {
+	// if the left child is done, then the join has finished.
+	if j.currentLeft == nil {
 		return nil, nil
 	}
 
@@ -78,121 +90,219 @@ func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
 		var err error
 		var actual *rl.Tuple
 
-		// ------- Verify if should read buffer or child2 --------
-		a1 := j.actual1.GetValue(j.targetID1)
-		var a2 rl.Value
-		if j.actual2 != nil {
-			a2 = j.actual2.GetValue(j.targetID2)
+		// ------- Verify if should read buffer or right child --------
+		curr1 := j.currentLeft.GetValue(j.targetIDLeft)
+		curr2 := rl.NewValue("Empty")
+		if j.currentRight != nil {
+			curr2 = j.currentRight.GetValue(j.targetIDRight)
 		}
+
 		var tupleB *rl.Tuple = nil
-		if j.buffer.Size() > 0 {
-			tupleB, err = j.buffer.GetRow(j.actualB)
+		if j.buffer.Size() > 0 && j.currentBufferIdx < j.buffer.Size() {
+			if j.debug {
+				fmt.Println("  **READING BUFFER: buffer size: ", j.buffer.Size())
+				fmt.Println("  **READING BUFFER: buffer Idx: ", j.currentBufferIdx)
+			}
+			tupleB, err = j.buffer.GetRow(j.currentBufferIdx)
 			if err != nil {
 				return nil, err
 			}
 		}
 
+		if j.debug {
+			fmt.Println("  **currL:", j.currentLeft)
+			fmt.Println("  **currR:", j.currentRight)
+			fmt.Println("  **currB:", tupleB)
+		}
+
 		if j.shouldReadBuffer {
+			if j.debug {
+				fmt.Println("SortMergeJoin: reading buffer --------------")
+			}
+			// if reading from buffer but buffer has ended.
+			// then read the next tuple from left child
 			if tupleB == nil {
-				j.actual1, err = j.child1.Next()
+				j.currentLeft, err = j.childLeft.Next()
 				if err != nil {
 					return nil, err
 				}
-				if j.actual1 == nil {
+				if j.currentLeft == nil {
+					// then the join has finished.
 					return nil, nil
 				}
 
+				// if the new tuple from left child has the same target value as the previous one,
+				// then continue merging from the start of the buffer;
+				// otherwise, clear the buffer and read from the right child.
 				t, _ := j.buffer.GetRow(0)
-				ab := t.GetValue(j.targetID2)
-				if a1 == ab {
-					j.actualB = 0
+				ab := t.GetValue(j.targetIDRight)
+				if curr1 == ab {
+					j.currentBufferIdx = 0
+					if j.debug {
+						fmt.Println("  -> Restart Buffer Reading")
+					}
 				} else {
 					j.shouldReadBuffer = false
 					j.buffer.Clear()
+					if j.debug {
+						fmt.Println("  -> buffer cleared. buffer size: ", j.buffer.Size())
+					}
 				}
 				continue
 			}
 
-			ab := tupleB.GetValue(j.targetID2)
-			if a1 != ab {
+			// if buffer has not ended, then read the next tuple from buffer.
+			ab := tupleB.GetValue(j.targetIDRight)
+			if j.debug {
+				fmt.Println("  -> comparing: \n     ", j.currentLeft, "\n      -AND-\n     ", tupleB)
+			}
+			if curr1 != ab {
+				if j.debug {
+					fmt.Println("  -> Stop Reading Buffer")
+				}
 				j.shouldReadBuffer = false
 				j.buffer.Clear()
+				if j.debug {
+					fmt.Println("  -> buffer cleared. buffer size: ", j.buffer.Size())
+				}
 				continue
 			}
 
 		} else {
-			if j.actual2 == nil {
+			if j.debug {
+				fmt.Println("SortMergeJoin: reading right child --------------")
+			}
+			// if reading from right child but right child has ended.
+			if j.currentRight == nil {
+				// if the buffer is not empty, then read the next tuple from buffer.
 				if tupleB != nil {
-					ab := tupleB.GetValue(j.targetID2)
-					if a1 == ab {
+					ab := tupleB.GetValue(j.targetIDRight)
+					if curr1 == ab {
 						j.shouldReadBuffer = true
 						continue
 					}
 				}
 
-				j.actual1 = nil
+				// otherwise, the join has finished.
+				j.currentLeft = nil
 				return nil, nil
 			}
 
-			if a1 != a2 {
-				if a1.LesserThan(a2) {
-					j.actual1, err = j.child1.Next()
+			if curr1 != curr2 {
+				if j.debug {
+					fmt.Println("  -> LEFT child != RIGHT child")
+				}
+
+				if tupleB != nil {
+					if j.debug {
+						fmt.Println("  -> Buffer Not Empty")
+					}
+
+					j.currentLeft, err = j.childLeft.Next()
 					if err != nil {
 						return nil, err
 					}
 
-					if j.actual1 == nil {
+					if j.currentLeft == nil {
 						return nil, nil
 					}
 
-					a1 = j.actual1.GetValue(j.targetID1)
-					if tupleB != nil {
-						ab := tupleB.GetValue(j.targetID2)
-						if a1 == ab {
-							j.shouldReadBuffer = true
+					curr1 = j.currentLeft.GetValue(j.targetIDLeft)
+					ab := tupleB.GetValue(j.targetIDRight)
+					if curr1 == ab {
+						if j.debug {
+							fmt.Println("  -> Should read from buffer")
 						}
+
+						j.shouldReadBuffer = true
+
+					} else {
+						if j.debug {
+							fmt.Println("  -> Should not read from buffer")
+						}
+
+						j.shouldReadBuffer = false
+						j.buffer.Clear()
 					}
 					continue
-				} else if j.actual2 != nil {
-					j.actual2, err = j.child2.Next()
+				}
+
+				if curr1.LesserThan(curr2) {
+					if j.debug {
+						fmt.Println("  -> Advancing Left child")
+					}
+
+					j.currentLeft, err = j.childLeft.Next()
 					if err != nil {
 						return nil, err
 					}
-					if j.actual2 == nil {
-						j.actual1 = nil
+
+					if j.currentLeft == nil {
 						return nil, nil
 					}
+
+					continue
+				} else if j.currentRight != nil {
+					if j.debug {
+						fmt.Println("  -> advancing Right Child")
+					}
+
+					j.currentRight, err = j.childRight.Next()
+					if err != nil {
+						return nil, err
+					}
+
+					if j.currentRight == nil {
+						j.currentLeft = nil
+						return nil, nil
+					}
+
 					continue
 				}
 			}
 		}
+
 		// ------- Read Next tuple --------
 
 		if j.shouldReadBuffer {
-			actual, err = j.buffer.GetRow(j.actualB)
+			actual, err = j.buffer.GetRow(j.currentBufferIdx)
 			if err != nil {
 				return nil, err
 			}
 
-			j.actualB++
+			j.currentBufferIdx++
+			j.readFromBuffer = true
+			if j.debug {
+				fmt.Println("  actual:", actual)
+				fmt.Println("  current buffer idx:", j.currentBufferIdx)
+			}
 		} else {
-			actual = j.actual2
+			actual = j.currentRight
 
-			j.actual2, err = j.child2.Next()
+			j.currentRight, err = j.childRight.Next()
 			if err != nil {
 				return nil, err
+			}
+
+			j.readFromBuffer = false
+			if j.debug {
+				fmt.Println("  ---> actual:", actual)
+				fmt.Println("  ---> current right:", j.currentRight)
 			}
 		}
 
-		// ------- return new tuple --------
-		if (*j.actual1)[j.targetID1] == (*actual)[j.targetID2] {
-			j.buffer.AddTuple(actual)
+		// ------- return merged tuple --------
+
+		if (*j.currentLeft)[j.targetIDLeft] == (*actual)[j.targetIDRight] {
+			if !j.readFromBuffer {
+				j.buffer.AddTuple(actual)
+			}
 
 			joining := actual.Clone()
-			joining.Remove(j.targetID2)
+			joining.Remove(j.targetIDRight)
 
-			newTuple := j.actual1.Clone()
-			newTuple.MoveToEnd(j.targetID1)
+			newTuple := j.currentLeft.Clone()
+			newTuple.MoveToEnd(j.targetIDLeft)
 			newTuple.AppendTuple(joining)
 
 			return newTuple, nil
@@ -201,21 +311,21 @@ func (j *SortMergeJoin) Next() (*rl.Tuple, error) {
 }
 
 func (j *SortMergeJoin) Close() error {
-	err := j.child1.Close()
+	err := j.childLeft.Close()
 	if err != nil {
 		return err
 	}
 
-	err = j.child2.Close()
+	err = j.childRight.Close()
 	if err != nil {
 		return err
 	}
 
-	j.actual1 = nil
-	j.actual2 = nil
-	j.targetID1 = -1
-	j.targetID2 = -1
-	j.actualB = -1
+	// j.currentLeft = nil
+	// j.currentRight = nil
+	j.targetIDLeft = -1
+	j.targetIDRight = -1
+	j.currentBufferIdx = -1
 	j.buffer = nil
 	j.opened = false
 	return nil

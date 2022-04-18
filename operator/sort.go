@@ -2,8 +2,11 @@ package operator
 
 import (
 	"errors"
+	"fmt"
 	rl "sgbd/relation"
 )
+
+var counter int = 0
 
 type Sort struct {
 	child    Operator
@@ -43,6 +46,21 @@ func (s *Sort) Open() error {
 
 	s.position = 0
 	s.opened = true
+
+	// fileName := "debug/sort_" + fmt.Sprintf("%d", counter) + ".txt"
+	// f, err := os.Create(fileName)
+	// counter += 1
+	// defer f.Close()
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// w := bufio.NewWriter(f)
+	// for idx, t := range s.relation.Rows() {
+	// 	str := fmt.Sprintf("%d: %v\n", idx, t)
+	// 	w.WriteString(str)
+	// }
+	// w.Flush()
+
 	return nil
 }
 

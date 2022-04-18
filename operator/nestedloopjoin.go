@@ -2,6 +2,7 @@ package operator
 
 import (
 	rl "sgbd/relation"
+	"sgbd/util"
 )
 
 type NestedLoopJoin struct {
@@ -16,6 +17,7 @@ type NestedLoopJoin struct {
 	opened    bool
 }
 
+// remove removes the element at the given index from the slice of columns.
 func remove(columns []string, idx int) []string {
 	return append(columns[:idx], columns[idx+1:]...)
 }
@@ -65,30 +67,22 @@ func (j *NestedLoopJoin) Next() (*rl.Tuple, error) {
 	for {
 		// Get next tuple from second child for merging
 		next, err := j.child2.Next()
-		if err != nil {
-			return nil, err
-		}
+		util.Check(err)
 
 		// if second child ended, get next tuple from first child
 		if next == nil {
 			j.actual, err = j.child1.Next()
-			if err != nil {
-				return nil, err
-			}
+			util.Check(err)
 
 			if j.actual == nil {
 				return nil, nil
 			}
 
 			err = j.child2.Close()
-			if err != nil {
-				return nil, err
-			}
+			util.Check(err)
 
 			err = j.child2.Open()
-			if err != nil {
-				return nil, err
-			}
+			util.Check(err)
 
 			continue
 		}
